@@ -157,15 +157,16 @@ class G1ParkourNode(UnitreeRsCameraNode):
 
         elif self.current_agent_name == "cold_start":
             action, done = self.available_agents[self.current_agent_name].step()
-            if done and ("stand" in self.available_agents.keys()):
-                self.get_logger().info(
-                    "ColdStartAgent done, press 'R1' to switch to stand agent.", throttle_duration_sec=10.0
-                )
-            else:
-                self.get_logger().info(
-                    "ColdStartAgent done, press any direction button to switch to parkour agent.",
-                    throttle_duration_sec=10.0,
-                )
+            if done:
+                if "stand" in self.available_agents.keys():
+                    self.get_logger().info(
+                        "ColdStartAgent done, press 'R1' to switch to stand agent.", throttle_duration_sec=10.0
+                    )
+                else:
+                    self.get_logger().info(
+                        "ColdStartAgent done, press any direction button to switch to parkour agent.",
+                        throttle_duration_sec=10.0,
+                    )
             self.send_action(
                 action,
                 self.available_agents[self.current_agent_name].action_offset,
