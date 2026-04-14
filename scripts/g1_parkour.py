@@ -9,6 +9,7 @@ from tf2_ros import TransformBroadcaster
 
 import instinct_onboard.robot_cfgs as robot_cfgs
 from instinct_onboard.agents.base import ColdStartAgent
+from instinct_onboard.agents.attention_parkour_agent import AttentionParkourAgent
 from instinct_onboard.agents.parkour_agent import (
     ParkourAgent,
     ParkourStandAgent,
@@ -41,6 +42,8 @@ Command-Line Arguments:
     Optional:
         --startup_step_size FLOAT
                               Startup step size for cold start agent (default: 0.2)
+        --use_attention      Use attention-based parkour ONNX encoder export
+                             (expects exported/0-map_attention.onnx or exported/map_attention_encoder.onnx)
         --nodryrun            Disable dry run mode (default: False, runs in dry run mode)
         --kpkd_factor FLOAT   KP/KD gain multiplier for cold start agent (default: 2.0)
         --depth_vis            Enable depth image visualization (publishes to /realsense/depth_image)
@@ -136,16 +139,26 @@ class G1ParkourNode(UnitreeRsCameraNode):
     def start_ros_handlers(self):
         super().start_ros_handlers()
         # build the joint state publisher and base_link tf publisher
-        self.joint_state_publisher = self.create_publisher(JointState, "joint_states", 10)
+        self.joint_state_publisher = self.create_publisher(
+            JointState, "joint_states", 10
+        )
         self.tf_broadcaster = TransformBroadcaster(self)
         # start the main loop with 20ms duration
         main_loop_duration = 0.02
-        self.get_logger().info(f"Starting main loop with duration: {main_loop_duration} seconds.")
-        self.main_loop_timer = self.create_timer(main_loop_duration, self.main_loop_callback)
+        self.get_logger().info(
+            f"Starting main loop with duration: {main_loop_duration} seconds."
+        )
+        self.main_loop_timer = self.create_timer(
+            main_loop_duration, self.main_loop_callback
+        )
         if MAIN_LOOP_FREQUENCY_CHECK_INTERVAL > 1:
-            self.main_loop_timer_counter: int = 0  # counter for the main loop timer to assess the actual frequency
+            self.main_loop_timer_counter: int = (
+                0  # counter for the main loop timer to assess the actual frequency
+            )
             self.main_loop_timer_counter_time = time.time()
-            self.main_loop_callback_time_consumptions = queue.Queue(maxsize=MAIN_LOOP_FREQUENCY_CHECK_INTERVAL)
+            self.main_loop_callback_time_consumptions = queue.Queue(
+                maxsize=MAIN_LOOP_FREQUENCY_CHECK_INTERVAL
+            )
 
     def main_loop_callback(self):
         main_loop_callback_start_time = time.time()
@@ -160,7 +173,8 @@ class G1ParkourNode(UnitreeRsCameraNode):
             if done:
                 if "stand" in self.available_agents.keys():
                     self.get_logger().info(
-                        "ColdStartAgent done, press 'R1' to switch to stand agent.", throttle_duration_sec=10.0
+                        "ColdStartAgent done, press 'R1' to switch to stand agent.",
+                        throttle_duration_sec=10.0,
                     )
                 else:
                     self.get_logger().info(
@@ -210,11 +224,14 @@ class G1ParkourNode(UnitreeRsCameraNode):
 
         # count the main loop timer counter and log the actual frequency every 500 counts
         if MAIN_LOOP_FREQUENCY_CHECK_INTERVAL > 1:
-            self.main_loop_callback_time_consumptions.put(time.time() - main_loop_callback_start_time)
+            self.main_loop_callback_time_consumptions.put(
+                time.time() - main_loop_callback_start_time
+            )
             self.main_loop_timer_counter += 1
             if self.main_loop_timer_counter % MAIN_LOOP_FREQUENCY_CHECK_INTERVAL == 0:
                 time_consumptions = [
-                    self.main_loop_callback_time_consumptions.get() for _ in range(MAIN_LOOP_FREQUENCY_CHECK_INTERVAL)
+                    self.main_loop_callback_time_consumptions.get()
+                    for _ in range(MAIN_LOOP_FREQUENCY_CHECK_INTERVAL)
                 ]
                 self.get_logger().info(
                     f"Actual main loop frequency: {(MAIN_LOOP_FREQUENCY_CHECK_INTERVAL / (time.time() - self.main_loop_timer_counter_time)):.2f} Hz. Mean time consumption: {np.mean(time_consumptions):.4f} s."
@@ -241,7 +258,10 @@ def main(args):
     )
     node.register_agent("stand", stand_agent)
 
-    parkour_agent = ParkourAgent(
+    parkour_agent_cls = AttentionParkourAgent if args.use_attention else ParkourAgent
+    node.get_logger().info(f"Using parkour agent class: {parkour_agent_cls.__name__}")
+
+    parkour_agent = parkour_agent_cls(
         logdir=args.logdir,
         ros_node=node,
         depth_vis=args.depth_vis,
@@ -340,6 +360,12 @@ if __name__ == "__main__":
         type=list,
         default=[0.0, 1.0],
         help="Range of linear velocity, both turn left and turn right (default: [0.0 1.0])",
+    )
+    parser.add_argument(
+        "--use_attention",
+        action="store_true",
+        default=False,
+        help="Use attention-based parkour model loading path (default: False)",
     )
     parser.add_argument(
         "--nodryrun",
