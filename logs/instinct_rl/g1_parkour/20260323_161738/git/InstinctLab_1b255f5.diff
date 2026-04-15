@@ -1,0 +1,81 @@
+--- git status ---
+On branch dev_pp
+Your branch is up to date with 'origin/dev_pp'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   scripts/instinct_rl/train.py
+	modified:   source/instinctlab/instinctlab/tasks/shadowing/perceptive/config/g1/agents/instinct_rl_vae_cfg.py
+	modified:   train.sh
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	scripts/gpu_diagnostic.sh
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/scripts/instinct_rl/train.py b/scripts/instinct_rl/train.py
+old mode 100644
+new mode 100755
+diff --git a/source/instinctlab/instinctlab/tasks/shadowing/perceptive/config/g1/agents/instinct_rl_vae_cfg.py b/source/instinctlab/instinctlab/tasks/shadowing/perceptive/config/g1/agents/instinct_rl_vae_cfg.py
+index 005a926..483dbe6 100644
+--- a/source/instinctlab/instinctlab/tasks/shadowing/perceptive/config/g1/agents/instinct_rl_vae_cfg.py
++++ b/source/instinctlab/instinctlab/tasks/shadowing/perceptive/config/g1/agents/instinct_rl_vae_cfg.py
+@@ -147,10 +147,26 @@ class AlgorithmCfg(InstinctRlPpoAlgorithmCfg):
+         "num_actions": 29,
+         "num_rewards": 1,
+     }
+-    teacher_logdir = os.path.expanduser(
+-        "~/Data/instinctlab_logs/instinct_rl/g1_perceptive_shadowing/20260111_103654_g1Perceptive_4MotionsKneelClimbStep1_concatMotionBins__GPU0_from20260108_032900"
++
++    # teacher_logdir = os.path.expanduser(
++    #     "~/Data/instinctlab_logs/instinct_rl/g1_perceptive_shadowing/20260111_103654_g1Perceptive_4MotionsKneelClimbStep1_concatMotionBins__GPU0_from20260108_032900"
++    # )
++     # 1. 获取当前配置文件（g1_parkour_target_amp_cfg.py）的绝对路径
++    # __file__ 永远指向当前文件，和执行目录无关！
++    CURRENT_FILE_PATH = os.path.abspath(__file__)
++    # 2. 获取当前文件所在目录
++    CURRENT_DIR = os.path.dirname(CURRENT_FILE_PATH)
++    # 3. 向上回溯到项目根目录（Instinct/）
++    # 从 g1_parkour_target_amp_cfg.py 到 Instinct/ 需要回溯 9 级目录
++    PROJECT_ROOT = os.path.abspath(
++        os.path.join(CURRENT_DIR, "../../../../../../../../../../")
+     )
+ 
++    TEACHER_FOLDER = os.path.join(
++        PROJECT_ROOT,
++        "Datasets/instinct/20260121_085042_g1Perceptive_concatMotionBins",
++    )
++    teacher_logdir = TEACHER_FOLDER
+ 
+ @configclass
+ class NormalizersCfg:
+diff --git a/train.sh b/train.sh
+index 0de541d..e043f8b 100644
+--- a/train.sh
++++ b/train.sh
+@@ -5,7 +5,8 @@
+ #SBATCH --cpus-per-task=96            
+ #SBATCH --output=sbatch/train_%j.out     
+ #SBATCH --error=sbatch/train_%j.err      
+-#SBATCH --nodelist=3090node1  
++#SBATCH --nodelist=3090node1              #### 需要修改!
++#SBATCH --gres=gpu:4                      #### 需要修改(与下方nproc_per_node一致)!
+ 
+ # 环境变量（仅保留NCCL相关，去掉MASTER_PORT/ADDR）
+ export NCCL_SOCKET_IFNAME=eno2
+@@ -17,9 +18,9 @@ source /mnt/slurmfs-4090node1/homes/xsheng420/miniconda3/bin/activate instinct
+ # 使用srun启动分布式训练
+ srun python -m torch.distributed.run \
+   --nnodes=1  --nproc_per_node=4 \
+- scripts/instinct_rl/train.py \
++  scripts/instinct_rl/train.py \
+   --task=Instinct-Parkour-Target-Amp-G1-v0 \
+   --distributed \
+-  --num_envs=1024 \
++  --num_envs=2048 \
+   --headless
+   
